@@ -1182,7 +1182,7 @@ class ConnectedOwnVirtualDevice : ConnectedVirtualOrNativeDevice {
         self.deviceName = name
         self.midiClient = client
         super.init(id: String(stringToId(str: name)), type: "own-virtual", streamHandler: streamHandler, client: client, ports: [])
-        initVirtualSource()
+        // initVirtualSource()
         initVirtualDestination()
         self.name = name
     }
@@ -1219,7 +1219,7 @@ class ConnectedOwnVirtualDevice : ConnectedVirtualOrNativeDevice {
     }
 
     override func close() {
-        closeVirtualSource()
+        // closeVirtualSource()
         closeVirtualDestination()
     }
 
