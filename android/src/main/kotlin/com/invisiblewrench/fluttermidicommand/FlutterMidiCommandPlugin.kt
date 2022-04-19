@@ -28,7 +28,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.media.midi.MidiDeviceStatus
 
-
+import android.os.Build
 
 
 
@@ -253,19 +253,27 @@ class FlutterMidiCommandPlugin : FlutterPlugin, ActivityAware, MethodCallHandler
   private fun tryToInitBT() : String? {
     Log.d("FlutterMIDICommand", "tryToInitBT")
 
-    if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED ||
-            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+    var BLE_PERMISSIONS = arrayOf(
+      // Manifest.permission.ACCESS_COARSE_LOCATION,
+      Manifest.permission.ACCESS_FINE_LOCATION
+    )
 
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      BLE_PERMISSIONS = arrayOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_CONNECT
+      )
+    }
+
+    if (BLE_PERMISSIONS.any { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
       bluetoothState = "unknown";
-
       if (activity != null) {
         var activity = activity!!
-        if (activity.shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_ADMIN) || activity.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+        if (BLE_PERMISSIONS.any { activity.shouldShowRequestPermissionRationale(it) }) {
           Log.d("FlutterMIDICommand", "Show rationale for Location")
           bluetoothState = "unauthorized"
         } else {
-          activity.requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_ADMIN, Manifest.permission.ACCESS_FINE_LOCATION), PERMISSIONS_REQUEST_ACCESS_LOCATION)
-
+          activity.requestPermissions(BLE_PERMISSIONS, PERMISSIONS_REQUEST_ACCESS_LOCATION)
         }
       }
     } else {
