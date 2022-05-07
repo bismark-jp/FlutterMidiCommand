@@ -748,7 +748,7 @@ class FlutterMidiCommandPlugin : FlutterPlugin, ActivityAware, MethodCallHandler
 //        Log.d("FlutterMIDICommand", "is binder alive? ${this.midiDevice?.info?.properties?.getBinder(null)?.isBinderAlive}")
 
         var serviceInfo = it.properties.getParcelable<ServiceInfo>("service_info")
-        if (serviceInfo?.name == "com.invisiblewrench.fluttermidicommand.VirtualDeviceService") {
+        if (serviceInfo?.name == "_com.invisiblewrench.fluttermidicommand.VirtualDeviceService") {
           Log.d("FlutterMIDICommand", "Own virtual")
           isOwnVirtualDevice = true
         } else {
