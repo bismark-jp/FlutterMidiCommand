@@ -92,7 +92,7 @@ class ConnectedDevice : Device {
 
         } else {
 //        Log.d("FlutterMIDICommand", "Send to input port ${this.inputPort}")
-            this.inputPort?.send(data, 0, data.count(), if (timestamp is Long) timestamp else 0)
+            this.inputPort?.send(data, 0, data.count(), if (timestamp is Long) timestamp else System.nanoTime())
         }
     }
 
