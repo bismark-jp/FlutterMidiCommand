@@ -1030,11 +1030,18 @@ class ConnectedVirtualOrNativeDevice : ConnectedDevice {
   var buffer = UnsafeMutablePointer<MIDIPacket>.allocate(capacity: 2) // Don't know why I need to a capacity of 2 here. If I setup 1 I'm getting a crash.
 
   func handlePacketList(_ packetList:UnsafePointer<MIDIPacketList>, srcConnRefCon:UnsafeMutableRawPointer?) {
+/*
     let packets = packetList.pointee
     let packet:MIDIPacket = packets.packet
     var ap = buffer;
     buffer.initialize(to:packet)
+*/
+    let deviceInfo = ["name" : name,
+        "id": String(id),
+        "type":deviceType,
+        "connected": String(true),]
 
+/*
     for _ in 0 ..< packets.numPackets {
       let p = ap.pointee
       var tmp = p.data
@@ -1042,6 +1049,14 @@ class ConnectedVirtualOrNativeDevice : ConnectedDevice {
       let timestamp = p.timeStamp
         parseData(data: data, timestamp: timestamp)
       ap = MIDIPacketNext(ap)
+    }
+ */
+    SMPacketListApply(packetList) { packet in
+        let p = packet.pointee
+        var tmp = p.data
+        let data = Data(bytes: &tmp, count: Int(p.length))
+        let timestamp = p.timeStamp
+        streamHandler.send(data: ["data": data, "timestamp":timestamp, "device":deviceInfo])
     }
   }
 
@@ -1249,14 +1264,16 @@ class ConnectedNativeDevice : ConnectedVirtualOrNativeDevice {
     }
 
     override func handlePacketList(_ packetList:UnsafePointer<MIDIPacketList>, srcConnRefCon:UnsafeMutableRawPointer?) {
+/*
         let packets = packetList.pointee
         let packet:MIDIPacket = packets.packet
         var ap = buffer
         ap.initialize(to:packet)
+ */
 
-//        let deviceInfo = ["name" : name,
-//                          "id": String(id),
-//                          "type":"native"]
+        let deviceInfo = ["name" : name,
+                          "id": String(id),
+                          "type":"native"]
 
         var timestampFactor : Double = 1.0
         var tb = mach_timebase_info_data_t()
@@ -1267,6 +1284,7 @@ class ConnectedNativeDevice : ConnectedVirtualOrNativeDevice {
 
 //        print("tb \(tb) timestamp \(timestampFactor)")
 
+/*
         for _ in 0 ..< packets.numPackets {
             let p = ap.pointee
             var tmp = p.data
@@ -1275,8 +1293,18 @@ class ConnectedNativeDevice : ConnectedVirtualOrNativeDevice {
             parseData(data: data, timestamp: timestamp)
             ap = MIDIPacketNext(ap)
         }
+ */
 
 //        ap.deallocate()
+		
+		SMPacketListApply(packetList) { packet in
+			let p = packet.pointee
+			var tmp = p.data
+			let data = Data(bytes: &tmp, count: Int(p.length))
+			let timestamp = UInt64(round(Double(p.timeStamp) * timestampFactor))
+//            print("data \(data) timestamp \(timestamp)")
+			streamHandler.send(data: ["data": data, "timestamp":timestamp, "device":deviceInfo])
+		}
     }
 }
 
