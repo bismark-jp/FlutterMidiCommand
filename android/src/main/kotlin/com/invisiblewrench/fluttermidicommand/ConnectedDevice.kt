@@ -31,7 +31,7 @@ class ConnectedDevice : Device {
 //        }
 
             var serviceInfo = it.properties.getParcelable<ServiceInfo>("service_info")
-            if (serviceInfo?.name == "com.invisiblewrench.fluttermidicommand.VirtualDeviceService") {
+            if (serviceInfo?.name == "_com.invisiblewrench.fluttermidicommand.VirtualDeviceService") {
                 Log.d("FlutterMIDICommand", "Own virtual")
                 isOwnVirtualDevice = true
             } else {
