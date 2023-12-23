@@ -10,6 +10,9 @@ class VirtualDeviceService() : MidiDeviceService() {
 
     override fun onGetInputPortReceivers(): Array<MidiReceiver> {
         Log.d("FlutterMIDICommand", "Create recevier $this")
+        if (FlutterMidiCommandPlugin.rxStreamHandler == null) {
+            return emptyArray<MidiReceiver>()
+        }
         if (receiver == null) {
             receiver = VirtualRXReceiver(FlutterMidiCommandPlugin.rxStreamHandler)
         }
