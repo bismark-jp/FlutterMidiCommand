@@ -1555,7 +1555,7 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
 				let msec = nanoseconds / 1_000_000 // nsec -> msec
 				return msec;
 			}
-			let tp = (timestamp ?? defultaTimeStamp()) & 0x01FF
+			let tp = (timestamp ?? defultaTimeStamp()) & 0x1FFF
 
             let packetSize = peripheral.maximumWriteValueLength(for:writeType)
             // print("packetSize = \(packetSize)")
