@@ -1544,7 +1544,7 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
     }
 
     override func send(bytes:[UInt8], timestamp: UInt64?) {
-        print("ble send \(id) \(bytes)")
+        // print("ble send \(id) \(bytes)")
         if (characteristic != nil) {
 
 			func defultaTimeStamp() -> UInt64 {
@@ -1668,7 +1668,7 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
     func dequeueMidiBytes() {
 		objc_sync_enter(self)
         if (outboundMessageQueue.isEmpty) {
-            print("Can't dequeue empty queue - return")
+            // print("Can't dequeue empty queue - return")
 			objc_sync_exit(self)
             return
         }
