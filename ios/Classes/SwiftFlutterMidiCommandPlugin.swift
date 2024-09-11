@@ -1738,22 +1738,27 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
     var outboundMessageQueue = [Data]()
     
     func enqueueMidiData(bytes:Data) {
+        objc_sync_enter(self)
         outboundMessageQueue.append(bytes)
-        
+        objc_sync_exit(self)
+
         if (peripheral.canSendWriteWithoutResponse && !isBusy){
             dequeueMidiBytes()
         }
     }
     
     func dequeueMidiBytes() {
+        objc_sync_enter(self)
         if (outboundMessageQueue.isEmpty) {
             print("Can't dequeue empty queue - return")
             isBusy = false
+            objc_sync_exit(self)
             return
         }
         isBusy = true
         let messageBytes = outboundMessageQueue.removeFirst()
         peripheral.writeValue(messageBytes, for: characteristic!, type: writeType)
+        objc_sync_exit(self)
     }
     
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
