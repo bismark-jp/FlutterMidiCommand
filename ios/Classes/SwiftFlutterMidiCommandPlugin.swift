@@ -916,7 +916,12 @@ public class SwiftFlutterMidiCommandPlugin: NSObject, CBCentralManagerDelegate, 
     
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         print("central didDisconnectPeripheral \(peripheral)")
-        
+
+        connectedDevices.removeValue(forKey: peripheral.identifier.uuidString)
+        if discoveredDevices.contains(peripheral) {
+            discoveredDevices.remove(peripheral)
+        }
+
         updateSetupState(data: "deviceDisconnected")
     }
 }
