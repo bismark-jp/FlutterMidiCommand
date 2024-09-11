@@ -62,7 +62,7 @@ class ConnectedDevice : Device {
                 this.receiver?.send(data, 0, data.size, timestamp)
 
         } else {
-            this.inputPort?.send(data, 0, data.count(), if (timestamp is Long) timestamp else 0)
+            this.inputPort?.send(data, 0, data.count(), if (timestamp is Long) timestamp else System.nanoTime())
         }
     }
 
