@@ -1624,7 +1624,16 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
 //        print("ble send \(id) \(bytes)")
         if (characteristic != nil) {
             
-            
+            func defultaTimeStamp() -> UInt64 {
+                var timebase = mach_timebase_info_data_t()
+                mach_timebase_info(&timebase)
+
+                let nanoseconds = mach_absolute_time() * UInt64(timebase.numer) / UInt64(timebase.denom)
+                let msec = nanoseconds / 1_000_000 // nsec -> msec
+                return msec;
+            }
+            let tp = (timestamp ?? defultaTimeStamp()) & 0x1FFF
+
             let packetSize = peripheral.maximumWriteValueLength(for:writeType)
 //             print("packetSize = \(packetSize)")
             
@@ -1639,8 +1648,8 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
 //                    print("count \(dataBytes.count)")
                     
                     // Insert header(and empty timstamp high) and timestamp low in front Sysex Start
-                    packet.insert(0x80, at: 0)
-                    packet.insert(0x80, at: 0)
+                    packet.insert(0x80 + UInt8(tp & 0x7F), at: 0)
+                    packet.insert(0x80 + UInt8(tp >> 7), at: 0)
                     
                     //                        print("packet \(packet)")
                     //                        print("packet \(hexEncodedString(packet))")
@@ -1685,8 +1694,8 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
                     dataBytes.insert(0x80, at: bytes.count-1)
                     
                     // Insert header(and empty timstamp high) and timestamp low in front of BLE Midi message
-                    dataBytes.insert(0x80, at: 0)
-                    dataBytes.insert(0x80, at: 0)
+                    dataBytes.insert(0x80 + UInt8(tp & 0x7F), at: 0)
+                    dataBytes.insert(0x80 + UInt8(tp >> 7), at: 0)
                     
                     enqueueMidiData(bytes: dataBytes)
                 }
@@ -1701,8 +1710,8 @@ class ConnectedBLEDevice : ConnectedDevice, CBPeripheralDelegate {
                 // Insert header(and empty timstamp high) and timestamp
                 // low in front of BLE Midi message
                 if((byte & 0x80) != 0){
-                    currentBuffer.insert(0x80, at: 0)
-                    currentBuffer.insert(0x80, at: 0)
+                    currentBuffer.insert(0x80 + UInt8(tp & 0x7F), at: 0)
+                    currentBuffer.insert(0x80 + UInt8(tp >> 7), at: 0)
                 }
                 currentBuffer.append(byte);
                 
