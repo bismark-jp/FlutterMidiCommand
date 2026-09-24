@@ -1,6 +1,5 @@
 package com.invisiblewrench.fluttermidicommand
 
-import android.content.pm.ServiceInfo
 import android.media.midi.*
 import com.invisiblewrench.fluttermidicommand.pigeon.MidiDeviceType
 import com.invisiblewrench.fluttermidicommand.pigeon.MidiHostDevice
@@ -32,23 +31,20 @@ class ConnectedDevice(
     var inputPort: MidiInputPort? = null
     var outputPort: MidiOutputPort? = null
 
-    private var isOwnVirtualDevice = false
-
     init {
         this.midiDevice = device
     }
 
     override fun connect() {
         this.midiDevice.info.let {
-            val serviceInfo = it.properties.getParcelable<ServiceInfo>("service_info")
-            if (serviceInfo?.name == "com.invisiblewrench.fluttermidicommand.VirtualDeviceService") {
-                isOwnVirtualDevice = true
-                this.receiver = RXReceiver(_toHostDevice(MidiDeviceType.OWN_VIRTUAL), onDataReceived)
-            } else {
-                this.receiver = RXReceiver(_toHostDevice(deviceType), onDataReceived)
-                inputPortIndex?.let { portIndex ->
-                    this.inputPort = this.midiDevice.openInputPort(portIndex)
-                }
+            // Always route through a real input port, even for our own virtual device
+            // (deviceType == OWN_VIRTUAL, already classified by the caller from the same
+            // service_info check). Sending via the receiver directly would only loop data
+            // back to this app's own onDataReceived and never reach
+            // VirtualDeviceService's input port, which is what other apps actually read from.
+            this.receiver = RXReceiver(_toHostDevice(deviceType), onDataReceived)
+            inputPortIndex?.let { portIndex ->
+                this.inputPort = this.midiDevice.openInputPort(portIndex)
             }
             outputPortIndex?.let { portIndex ->
                 this.outputPort = this.midiDevice.openOutputPort(portIndex)
@@ -71,15 +67,7 @@ class ConnectedDevice(
     }
 
     override fun send(data: ByteArray, timestamp: Long?) {
-        if(isOwnVirtualDevice) {
-            if (timestamp == null)
-                this.receiver?.send(data, 0, data.size)
-            else
-                this.receiver?.send(data, 0, data.size, timestamp)
-
-        } else {
-            this.inputPort?.send(data, 0, data.count(), timestamp ?: System.nanoTime())
-        }
+        this.inputPort?.send(data, 0, data.count(), timestamp ?: System.nanoTime())
     }
 
     override fun close() {
