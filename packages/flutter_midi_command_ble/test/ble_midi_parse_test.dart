@@ -252,6 +252,39 @@ void main() {
     }
   });
 
+  test('buildBleMidiSysExPackets encodes a given timestamp', () {
+    // ts = 0x1234 -> header carries bits 6..12, timestamp byte carries bits
+    // 0..6 (both with the high framing bit set).
+    const ts = 0x1234;
+    final packets = buildBleMidiSysExPackets(
+      [0xF0, 0x01, 0xF7],
+      20,
+      timestamp: ts,
+    );
+
+    final packet = packets.single;
+    expect(packet[0], 0x80 | (ts >> 7), reason: 'header byte');
+    expect(packet[1], 0x80 | (ts & 0x7F), reason: 'opening timestamp byte');
+    expect(
+      packet[packet.length - 2],
+      0x80 | (ts & 0x7F),
+      reason: 'closing timestamp byte before F7',
+    );
+  });
+
+  test('buildBleMidiSysExPackets masks the timestamp to 13 bits', () {
+    // The BLE MIDI timestamp counter wraps every 8192 ms (2^13), so 0x2000
+    // must encode identically to 0.
+    final wrapped = buildBleMidiSysExPackets(
+      [0xF0, 0x01, 0xF7],
+      20,
+      timestamp: 0x2000,
+    );
+    final zero = buildBleMidiSysExPackets([0xF0, 0x01, 0xF7], 20, timestamp: 0);
+
+    expect(wrapped, zero);
+  });
+
   test(
     'BLE MIDI SysEx survives a chunk/parse round-trip at any size',
     () async {

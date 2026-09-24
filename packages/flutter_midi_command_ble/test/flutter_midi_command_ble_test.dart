@@ -1073,4 +1073,47 @@ void main() {
     expect(failures.first.deviceId, 'ble-write-fail');
     expect(failures.first.error, isA<StateError>());
   });
+
+  test('sendData with an explicit timestamp encodes it on the wire', () async {
+    await connectDevice(transport, 'ble-ts-explicit');
+    fakePlatform.writtenPackets.clear();
+
+    // Note On: the status byte triggers the header/timestamp prefix.
+    transport.sendData(
+      Uint8List.fromList([0x90, 0x3C, 0x64]),
+      timestamp: 0x1234,
+      deviceId: 'ble-ts-explicit',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+
+    expect(fakePlatform.writtenPackets, hasLength(1));
+    final packet = fakePlatform.writtenPackets.single;
+    expect(packet[0], 0x80 | (0x1234 >> 7), reason: 'header byte');
+    expect(packet[1], 0x80 | (0x1234 & 0x7F), reason: 'timestamp byte');
+    expect(packet.sublist(2), [0x90, 0x3C, 0x64]);
+  });
+
+  test('sendData without a timestamp still stamps outgoing messages', () async {
+    // BLE links can add noticeable, variable latency, so every send should
+    // carry a real timestamp even when the caller does not supply one.
+    await connectDevice(transport, 'ble-ts-default');
+    fakePlatform.writtenPackets.clear();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+
+    transport.sendData(
+      Uint8List.fromList([0x90, 0x3C, 0x64]),
+      deviceId: 'ble-ts-default',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+
+    expect(fakePlatform.writtenPackets, hasLength(1));
+    final packet = fakePlatform.writtenPackets.single;
+    expect(
+      packet[0] == 0x80 && packet[1] == 0x80,
+      isFalse,
+      reason:
+          'the default timestamp is this device\'s elapsed time, not the '
+          'unstamped 0x80/0x80 placeholder',
+    );
+  });
 }

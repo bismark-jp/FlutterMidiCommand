@@ -18,13 +18,14 @@ const midiCharacteristicId = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
 /// reports something implausible.
 const _minBleMidiPacketSize = 20;
 
-/// BLE MIDI header and timestamp bytes for timestamp 0.
-///
-/// The spec encodes a 13-bit millisecond timestamp as `0x80 | (ts >> 7)` in the
-/// header and `0x80 | (ts & 0x7F)` in the timestamp byte. This transport does
-/// not stamp outgoing messages, so both collapse to `0x80`.
-const _bleMidiHeader = 0x80;
-const _bleMidiTimestamp = 0x80;
+/// Encodes a 13-bit BLE MIDI timestamp into its header and timestamp bytes,
+/// per the MMA BLE MIDI specification: `0x80 | (ts >> 7)` for the header and
+/// `0x80 | (ts & 0x7F)` for the timestamp byte. [timestamp] is masked to 13
+/// bits, wrapping every ~8.192 seconds as the spec's counter does.
+(int header, int timestampByte) _bleMidiTimestampBytes(int timestamp) {
+  final ts = timestamp & 0x1FFF;
+  return (0x80 | (ts >> 7), 0x80 | (ts & 0x7F));
+}
 
 enum _DeviceState { none, interrogating, available, irrelevant }
 
@@ -442,7 +443,9 @@ class UniversalBleMidiTransport implements MidiBleTransport {
 
   @override
   void sendData(Uint8List data, {int? timestamp, String? deviceId}) {
-    unawaited(sendDataAwaitingDelivery(data, deviceId: deviceId));
+    unawaited(
+      sendDataAwaitingDelivery(data, timestamp: timestamp, deviceId: deviceId),
+    );
   }
 
   @override
@@ -453,11 +456,12 @@ class UniversalBleMidiTransport implements MidiBleTransport {
   }) {
     _activateIfNeeded();
     if (deviceId != null) {
-      return _devices[deviceId]?.send(data) ?? Future<void>.value();
+      return _devices[deviceId]?.send(data, timestamp: timestamp) ??
+          Future<void>.value();
     }
     return Future.wait([
       for (final device in _devices.values.where((d) => d.connected))
-        device.send(data),
+        device.send(data, timestamp: timestamp),
     ]);
   }
 
@@ -510,18 +514,27 @@ class UniversalBleMidiTransport implements MidiBleTransport {
 ///
 /// [maxWriteSize] is the negotiated ATT MTU minus 3 bytes of write overhead,
 /// floored at [_minBleMidiPacketSize].
+///
+/// [timestamp] is the outgoing BLE MIDI timestamp shared by every packet of
+/// this message (masked to 13 bits by [_bleMidiTimestampBytes]); it defaults
+/// to 0, which reproduces the header/timestamp bytes of an unstamped message.
 @visibleForTesting
-List<List<int>> buildBleMidiSysExPackets(List<int> bytes, int maxWriteSize) {
+List<List<int>> buildBleMidiSysExPackets(
+  List<int> bytes,
+  int maxWriteSize, {
+  int timestamp = 0,
+}) {
+  final (header, timestampByte) = _bleMidiTimestampBytes(timestamp);
   final writeSize = max(_minBleMidiPacketSize, maxWriteSize);
 
   // header + timestamp + payload + timestamp + 0xF7
   if (bytes.length + 3 <= writeSize) {
     return [
       [
-        _bleMidiHeader,
-        _bleMidiTimestamp,
+        header,
+        timestampByte,
         ...bytes.sublist(0, bytes.length - 1),
-        _bleMidiTimestamp,
+        timestampByte,
         bytes.last,
       ],
     ];
@@ -548,13 +561,13 @@ List<List<int>> buildBleMidiSysExPackets(List<int> bytes, int maxWriteSize) {
     final take = canClose ? remaining : min(capacity, remaining);
 
     final packet = <int>[
-      _bleMidiHeader,
-      if (isFirst) _bleMidiTimestamp,
+      header,
+      if (isFirst) timestampByte,
       ...payload.getRange(offset, offset + take),
     ];
     if (canClose) {
       packet
-        ..add(_bleMidiTimestamp)
+        ..add(timestampByte)
         ..add(bytes.last);
       closed = true;
     }
@@ -566,7 +579,7 @@ List<List<int>> buildBleMidiSysExPackets(List<int> bytes, int maxWriteSize) {
   // The payload filled the last packet exactly, leaving no room for the
   // terminator. A packet holding only the terminator is valid framing.
   if (!closed) {
-    packets.add([_bleMidiHeader, _bleMidiTimestamp, bytes.last]);
+    packets.add([header, timestampByte, bytes.last]);
   }
 
   return packets;
@@ -733,6 +746,16 @@ class _BleMidiDevice extends MidiDevice {
   /// Length of the last SysEx whose packet split was logged, so a bulk
   /// transfer reports its shape once instead of once per message.
   int? _loggedSysExLength;
+
+  /// Source for the outgoing BLE MIDI timestamp when a caller does not supply
+  /// one. BLE links can add noticeable, variable latency, and the timestamp
+  /// lets a receiver detect and correct for that jitter, so sends should
+  /// always carry one. A monotonic per-device clock is what the 13-bit BLE
+  /// MIDI counter is for — it only orders messages within its own ~8.192 s
+  /// window, not against wall-clock time.
+  final Stopwatch _clock = Stopwatch()..start();
+
+  int _defaultTimestamp() => _clock.elapsedMilliseconds;
 
   void updateConnectionState(BleConnectionState state) {
     final isConnected = state == BleConnectionState.connected;
@@ -901,14 +924,19 @@ class _BleMidiDevice extends MidiDevice {
   /// reassembles statefully, so two overlapping sends would interleave their
   /// packets in universal_ble's shared queue and the peripheral would
   /// reassemble one message out of two.
-  Future<void> send(Uint8List bytes) {
-    final delivered = _sendChain.then((_) => _writeMessage(bytes));
+  ///
+  /// [timestamp] is the outgoing BLE MIDI timestamp; if omitted, it defaults
+  /// to this device's monotonic clock (see [_defaultTimestamp]).
+  Future<void> send(Uint8List bytes, {int? timestamp}) {
+    final delivered = _sendChain.then(
+      (_) => _writeMessage(bytes, timestamp ?? _defaultTimestamp()),
+    );
     // Absorb errors here, or one failed write stalls every later send.
     _sendChain = delivered.catchError((Object _) {});
     return delivered;
   }
 
-  Future<void> _writeMessage(Uint8List bytes) async {
+  Future<void> _writeMessage(Uint8List bytes, int timestamp) async {
     if (bytes.isEmpty) {
       return;
     }
@@ -917,7 +945,11 @@ class _BleMidiDevice extends MidiDevice {
     }
 
     if (bytes.first == 0xF0 && bytes.last == 0xF7) {
-      final packets = buildBleMidiSysExPackets(bytes, _maxWriteSize);
+      final packets = buildBleMidiSysExPackets(
+        bytes,
+        _maxWriteSize,
+        timestamp: timestamp,
+      );
       if (bytes.length != _loggedSysExLength) {
         // Once per distinct SysEx size: a bulk transfer sends thousands of
         // identical-length messages and this is the number that decides how
@@ -936,13 +968,14 @@ class _BleMidiDevice extends MidiDevice {
 
     // Channel and system messages are a few bytes each, so they are framed one
     // message per packet and never need splitting.
+    final (header, timestampByte) = _bleMidiTimestampBytes(timestamp);
     final dataBytes = List<int>.from(bytes);
     var currentBuffer = <int>[];
     for (var i = 0; i < dataBytes.length; i++) {
       final byte = dataBytes[i];
       if ((byte & 0x80) != 0) {
-        currentBuffer.insert(0, _bleMidiTimestamp);
-        currentBuffer.insert(0, _bleMidiHeader);
+        currentBuffer.insert(0, timestampByte);
+        currentBuffer.insert(0, header);
       }
       currentBuffer.add(byte);
 
