@@ -1,0 +1,4 @@
+# Lets bs-16i-flutter (not a member of this workspace) resolve this package
+# standalone via a `path:` dependency, per
+# https://dart.dev/tools/pub/workspaces#temporarily-resolving-a-package-outside-its-workspace
+resolution:

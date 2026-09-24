@@ -14,6 +14,16 @@ pubspec.lock
 # root `workspace:` list, not per-package overrides. Melos no longer generates
 # these, and `dependency_overrides` are only legal in the workspace root.
 pubspec_overrides.yaml
+# Exception: these four are committed deliberately. They clear `resolution:`
+# (see https://dart.dev/tools/pub/workspaces#temporarily-resolving-a-package-outside-its-workspace)
+# so external projects that depend on this fork via path/git (not workspace
+# members themselves) can resolve these packages standalone instead of
+# silently falling back to the unpatched versions on pub.dev. Harmless to the
+# workspace's own resolution, which never reads a member's override file.
+!packages/flutter_midi_command_platform_interface/pubspec_overrides.yaml
+!packages/flutter_midi_command_darwin/pubspec_overrides.yaml
+!packages/flutter_midi_command_android/pubspec_overrides.yaml
+!packages/flutter_midi_command_ble/pubspec_overrides.yaml
 
 build/
 local.properties
